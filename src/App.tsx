@@ -697,42 +697,47 @@ export default function App() {
     }
   };
 
-  // Call Express server-side Gemini generation with resilient client-side fallback
+  // Call Express server-side Gemini generation with resilient client-side fallback and cinematic 3s simulation timer
   const handleForgeTrailer = async () => {
     setIsGenerating(true);
     setError(null);
     setIsPlaying(false);
     setCurrentTime(0);
 
-    let response;
-    let data;
-    let apiSuccess = false;
-
-    try {
-      response = await fetch("/api/generate-trailer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template_key: selectedTemplateKey === "custom" ? null : selectedTemplateKey,
-          custom_scenes: selectedTemplateKey === "custom" ? customScenes : null,
-          custom_title: customTitle,
-          custom_tone: customTone,
-          target_duration_seconds: targetDuration,
-          rhythm: rhythm
-        }),
-      });
-      if (response.ok) {
-        data = await response.json();
-        apiSuccess = true;
+    // 1. Kickoff the server fetch in the background
+    let serverData: any = null;
+    const fetchPromise = (async () => {
+      try {
+        const response = await fetch("/api/generate-trailer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            template_key: selectedTemplateKey === "custom" ? null : selectedTemplateKey,
+            custom_scenes: selectedTemplateKey === "custom" ? customScenes : null,
+            custom_title: customTitle,
+            custom_tone: customTone,
+            target_duration_seconds: targetDuration,
+            rhythm: rhythm
+          }),
+        });
+        if (response.ok) {
+          serverData = await response.json();
+        }
+      } catch (err) {
+        console.warn("Express server endpoint is unreachable. Will compile using high-speed local engine.");
       }
-    } catch (err: any) {
-      console.warn("Express server endpoint is unreachable. Running local Trailer Forge compilation engine fallback...");
-    }
+    })();
+
+    // 2. Guarantee a highly cinematic 3-second orchestrator simulation
+    const delayPromise = new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // 3. Wait for BOTH the simulation time AND the backend check to settle
+    await Promise.all([fetchPromise, delayPromise]);
 
     try {
-      if (apiSuccess && data) {
-        setProject(data);
-        setSelectedEditItem(data.edit_sheet[0] || null);
+      if (serverData) {
+        setProject(serverData);
+        setSelectedEditItem(serverData.edit_sheet[0] || null);
         setSuccessMessage("Trailer successfully forged using cloud Multi-Agent Orchestrator!");
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
