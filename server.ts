@@ -430,6 +430,86 @@ app.post("/api/ai/chat", async (req, res) => {
   }
 });
 
+// 1b. Groq Chat Completions API Endpoint (Translates your Python snippet to server-side TypeScript)
+app.post("/api/ai/groq", async (req, res) => {
+  try {
+    const { 
+      messages, 
+      model = "openai/gpt-oss-120b", 
+      temperature = 1, 
+      max_completion_tokens = 2048, 
+      top_p = 1,
+      reasoning_effort = "medium",
+      stream = false 
+    } = req.body;
+    
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({ 
+        error: "GROQ_API_KEY is not configured in your environment. Please add it to your environment variables." 
+      });
+    }
+
+    // Call Groq API via native fetch (OpenAI compatible)
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        max_completion_tokens,
+        top_p,
+        reasoning_effort,
+        stream
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Groq API Error: ${errText}` });
+    }
+
+    if (stream) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const body = response.body as any;
+      if (body) {
+        if (typeof body.on === "function") {
+          body.on("data", (chunk: any) => res.write(chunk));
+          body.on("end", () => res.end());
+          body.on("error", () => res.end());
+        } else if (typeof body.getReader === "function") {
+          const reader = body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+          }
+          res.end();
+        } else {
+          for await (const chunk of body) {
+            res.write(chunk);
+          }
+          res.end();
+        }
+      } else {
+        res.end();
+      }
+    } else {
+      const data = await response.json();
+      res.json(data);
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
 // 2. Image Creation & Editing with gemini-3.1-flash-image
 app.post("/api/ai/image", async (req, res) => {
   try {
