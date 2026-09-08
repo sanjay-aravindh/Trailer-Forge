@@ -411,6 +411,24 @@ export default function App() {
 
   // --- AI FORGE CREATIVE SUITE CONTROLLER SUITE ---
 
+  const handleJsonResponse = async (res: Response) => {
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("text/html")) {
+      const htmlText = await res.text();
+      if (
+        htmlText.includes("__cookie_check.html") ||
+        htmlText.includes("302 Found") ||
+        htmlText.includes("cookie") ||
+        htmlText.includes("The page c") ||
+        htmlText.includes("The page")
+      ) {
+        throw new Error("AI Studio Cookie Verification Intercepted: Please open this application in a NEW BROWSER TAB (click the 'Open in new tab' button in the top-right of the AI Studio window). Viewing inside the embedded iframe blocks necessary security session cookies.");
+      }
+      throw new Error("Expected JSON, but received HTML page. Please try opening the application in a NEW browser tab directly.");
+    }
+    return res.json();
+  };
+
   // 1. Gemini Multi-Turn Dialogue Chatbot
   const handleSendChatMessage = async () => {
     if (!chatInput.trim()) return;
@@ -433,7 +451,7 @@ export default function App() {
           systemInstruction: `You are in character as: ${chatRole}. Formulate detailed advice fitting this specific role.`
         })
       });
-      const data = await res.json();
+      const data = await handleJsonResponse(res);
       if (data.error) {
         setChatHistory(prev => [...prev, { role: "model" as const, parts: [{ text: `⚠️ API Error: ${data.error}. Please confirm your GEMINI_API_KEY is configured in Settings > Secrets.` }] as any }]);
       } else if (data.text) {
@@ -470,7 +488,7 @@ export default function App() {
           aspectRatio: videoAspectRatio
         })
       });
-      const data = await res.json();
+      const data = await handleJsonResponse(res);
       if (data.error) {
         throw new Error(data.error);
       }
@@ -500,7 +518,7 @@ export default function App() {
               aspectRatio: data.aspectRatio
             })
           });
-          const statusData = await statusRes.json();
+          const statusData = await handleJsonResponse(statusRes);
           if (statusData.error) {
             clearInterval(interval);
             setVideoStatus("error");
@@ -544,7 +562,7 @@ export default function App() {
           model: musicModel
         })
       });
-      const data = await res.json();
+      const data = await handleJsonResponse(res);
       if (data.error) {
         setMusicError(data.error);
       } else if (data.audioUrl) {
@@ -582,7 +600,7 @@ export default function App() {
           base64Image: imageInputBase64
         })
       });
-      const data = await res.json();
+      const data = await handleJsonResponse(res);
       if (data.error) {
         setImageError(data.error);
       } else if (data.imageUrl) {
