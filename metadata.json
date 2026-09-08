@@ -1,0 +1,8 @@
+{
+  "name": "Trailer Forge Core",
+  "description": "Autonomous multi-agent AI film editing and trailer generation engine. Transform raw footage logs into professional, structured cinematic trailers with real-time editing, custom pacing, visual grades, and EDL exports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
