@@ -699,11 +699,9 @@ app.post("/api/ai/video/status", async (req, res) => {
     const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { "User-Agent": "aistudio-build" } } });
     
     try {
-      const { GenerateVideosOperation } = await import("@google/genai");
-      const op = new GenerateVideosOperation();
-      op.name = operationName;
+      const op = { name: operationName };
 
-      const updated = await ai.operations.getVideosOperation({ operation: op });
+      const updated = await ai.operations.getVideosOperation({ operation: op as any });
       if (updated.done) {
         const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
         res.json({ done: true, videoUrl: uri });

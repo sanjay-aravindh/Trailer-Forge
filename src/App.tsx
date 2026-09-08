@@ -143,6 +143,8 @@ export default function App() {
   const [imageInputBase64, setImageInputBase64] = useState<string | null>(null);
   const [imageGeneratedUrl, setImageGeneratedUrl] = useState<string | null>(null);
   const [isImageGenerating, setIsImageGenerating] = useState<boolean>(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [musicError, setMusicError] = useState<string | null>(null);
 
   // AI Creative Suite - Microphone & Transcription states
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -432,11 +434,16 @@ export default function App() {
         })
       });
       const data = await res.json();
-      if (data.text) {
+      if (data.error) {
+        setChatHistory(prev => [...prev, { role: "model" as const, parts: [{ text: `⚠️ API Error: ${data.error}. Please confirm your GEMINI_API_KEY is configured in Settings > Secrets.` }] as any }]);
+      } else if (data.text) {
         setChatHistory(prev => [...prev, { role: "model" as const, parts: [{ text: data.text }] as any }]);
+      } else {
+        setChatHistory(prev => [...prev, { role: "model" as const, parts: [{ text: "⚠️ Received empty response. Please verify server connectivity." }] as any }]);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Chatbot query failed:", e);
+      setChatHistory(prev => [...prev, { role: "model" as const, parts: [{ text: `⚠️ Connection Failed: ${e.message || e}. Ensure the backend dev server is active.` }] as any }]);
     } finally {
       setIsChatLoading(false);
     }
@@ -473,14 +480,14 @@ export default function App() {
       let attempts = 0;
       const interval = setInterval(async () => {
         attempts++;
-        if (attempts > 5) {
+        if (attempts > 12) { // 12 * 1.5s = 18 seconds timeout max
           clearInterval(interval);
           setVideoStatus("error");
           setVideoProgressText("Veo compilation timed out. Try again.");
           return;
         }
 
-        setVideoProgressText(`Compiling cinematic temporal motion blocks (${attempts * 20}%)...`);
+        setVideoProgressText(`Compiling cinematic temporal motion blocks (${Math.min(95, attempts * 10)}%)...`);
 
         try {
           const statusRes = await fetch("/api/ai/video/status", {
@@ -494,13 +501,24 @@ export default function App() {
             })
           });
           const statusData = await statusRes.json();
-          if (statusData.done) {
+          if (statusData.error) {
             clearInterval(interval);
-            setVideoGeneratedUrl(statusData.videoUrl);
-            setVideoStatus("finished");
+            setVideoStatus("error");
+            setVideoProgressText(`⚠️ Video compilation failure: ${statusData.error}`);
+          } else if (statusData.done) {
+            clearInterval(interval);
+            if (statusData.videoUrl) {
+              setVideoGeneratedUrl(statusData.videoUrl);
+              setVideoStatus("finished");
+            } else {
+              setVideoStatus("error");
+              setVideoProgressText("⚠️ Compilation completed, but no rendering URL was located.");
+            }
           }
-        } catch (e) {
-          console.error("Veo polling failed:", e);
+        } catch (e: any) {
+          clearInterval(interval);
+          setVideoStatus("error");
+          setVideoProgressText(`⚠️ Polling error: ${e.message || e}`);
         }
       }, 1500);
 
@@ -515,6 +533,7 @@ export default function App() {
     if (!musicPrompt.trim()) return;
     setIsMusicGenerating(true);
     setMusicGeneratedUrl(null);
+    setMusicError(null);
 
     try {
       const res = await fetch("/api/ai/music", {
@@ -526,14 +545,22 @@ export default function App() {
         })
       });
       const data = await res.json();
-      if (data.audioUrl) {
+      if (data.error) {
+        setMusicError(data.error);
+      } else if (data.audioUrl) {
         setMusicGeneratedUrl(data.audioUrl);
+        if (data.warning) {
+          setMusicError(`Notice: ${data.warning}`);
+        }
       } else if (data.audioBase64) {
         const audioUrl = `data:${data.mimeType || "audio/wav"};base64,${data.audioBase64}`;
         setMusicGeneratedUrl(audioUrl);
+      } else {
+        setMusicError("No audio preview or simulation was retrieved.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Music render error:", e);
+      setMusicError(`Connection failed: ${e.message || e}`);
     } finally {
       setIsMusicGenerating(false);
     }
@@ -544,6 +571,7 @@ export default function App() {
     if (!imagePrompt.trim()) return;
     setIsImageGenerating(true);
     setImageGeneratedUrl(null);
+    setImageError(null);
 
     try {
       const res = await fetch("/api/ai/image", {
@@ -555,11 +583,19 @@ export default function App() {
         })
       });
       const data = await res.json();
-      if (data.imageUrl) {
+      if (data.error) {
+        setImageError(data.error);
+      } else if (data.imageUrl) {
         setImageGeneratedUrl(data.imageUrl);
+        if (data.warning) {
+          setImageError(`Notice: ${data.warning}`);
+        }
+      } else {
+        setImageError("No image preview or simulation was retrieved.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Image render error:", e);
+      setImageError(`Connection failed: ${e.message || e}`);
     } finally {
       setIsImageGenerating(false);
     }
@@ -2249,6 +2285,12 @@ export default function App() {
                           <audio src={musicGeneratedUrl} controls className="h-6 w-full text-zinc-200" />
                         </div>
                       )}
+
+                      {musicError && (
+                        <div className={`p-2 rounded text-[10px] font-mono border ${musicError.startsWith("Notice:") ? "bg-amber-500/10 border-amber-500/20 text-amber-400" : "bg-rose-500/10 border-rose-500/20 text-rose-400"}`}>
+                          {musicError}
+                        </div>
+                      )}
                     </div>
 
                     {/* Matte Painting image creation/edit */}
@@ -2294,6 +2336,12 @@ export default function App() {
                             referrerPolicy="no-referrer"
                             className="rounded border border-zinc-850 shadow w-32 h-32 object-cover"
                           />
+                        </div>
+                      )}
+
+                      {imageError && (
+                        <div className={`p-2 rounded text-[10px] font-mono border ${imageError.startsWith("Notice:") ? "bg-amber-500/10 border-amber-500/20 text-amber-400" : "bg-rose-500/10 border-rose-500/20 text-rose-400"}`}>
+                          {imageError}
                         </div>
                       )}
                     </div>
